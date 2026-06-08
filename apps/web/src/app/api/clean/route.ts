@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         percentReduction
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Core clean error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to clean code' },

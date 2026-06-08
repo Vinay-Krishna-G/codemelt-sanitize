@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       },
       issues
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Core scan error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to analyze code' },

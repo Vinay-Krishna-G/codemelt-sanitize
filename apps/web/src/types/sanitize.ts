@@ -33,3 +33,25 @@ export interface CleanResponse {
   error?: string;
 }
 
+export interface RepositoryFile {
+  path: string;
+  content: string;
+  cleanedContent?: string;
+  issues: Issue[];
+  issueCount: number;
+  originalBytes: number;
+  cleanedBytes?: number;
+}
+
+export interface RepositoryAnalysis {
+  files: RepositoryFile[];
+  totalFiles: number;
+  totalIssues: number;
+  totalBytes: number;
+  totalBytesSaved: number;
+  totalComments: number;
+  totalTodos: number;
+  totalFixmes: number;
+  totalConsoleLogs: number;
+}
+
