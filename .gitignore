@@ -47,3 +47,16 @@ test-repo/
 .env.test.local
 .env.production.local
 .env.state
+
+# nested workspaces
+apps/*/node_modules/
+packages/*/node_modules/
+
+# next build
+apps/*/.next/
+
+# turbo
+.turbo/
+
+# cache
+.cache/
