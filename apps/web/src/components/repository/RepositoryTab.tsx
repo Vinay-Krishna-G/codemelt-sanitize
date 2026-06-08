@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { scanContent } from 'codemelt-sanitize-core/dist/scanner.js';
+import { cleanContent } from 'codemelt-sanitize-core/dist/cleaner.js';
 import { SUPPORTED_EXTENSIONS } from 'codemelt-sanitize-shared';
 import type { RepositoryAnalysis, RepositoryFile } from '../../types/sanitize';
 import { DEFAULT_ANALYZE_CONFIG } from '../../lib/default-config';
@@ -351,6 +352,77 @@ export default function RepositoryTab() {
     });
   };
 
+  // Batch clean all files in the repository in chunks
+  const handleBatchClean = async () => {
+    if (!repoAnalysis || repoLoading) return;
+    setRepoLoading(true);
+
+    const filesToClean = repoAnalysis.files;
+    const totalFiles = filesToClean.length;
+    setRepoProgress({ current: 0, total: totalFiles });
+
+    const updatedFiles = [...filesToClean];
+    const chunkSize = 10;
+
+    for (let i = 0; i < totalFiles; i += chunkSize) {
+      const chunkEnd = Math.min(i + chunkSize, totalFiles);
+
+      for (let j = i; j < chunkEnd; j++) {
+        const file = filesToClean[j];
+        const cleaned = cleanContent(file.content, file.path, DEFAULT_ANALYZE_CONFIG);
+        const cleanedIssues = scanContent(cleaned, file.path, DEFAULT_ANALYZE_CONFIG);
+
+        updatedFiles[j] = {
+          ...file,
+          cleanedContent: cleaned,
+          cleanedBytes: new TextEncoder().encode(cleaned).length,
+          issues: cleanedIssues,
+          issueCount: cleanedIssues.length
+        };
+      }
+
+      setRepoProgress({ current: chunkEnd, total: totalFiles });
+      
+      // Yield control to the UI event loop to render progress updates
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    // Recalculate repository-level metrics
+    let totalIssues = 0;
+    let totalComments = 0;
+    let totalTodos = 0;
+    let totalFixmes = 0;
+    let totalConsoleLogs = 0;
+    let totalBytesSaved = 0;
+
+    updatedFiles.forEach((file) => {
+      file.issues.forEach((issue) => {
+        if (issue.type === 'comment') totalComments++;
+        else if (issue.type === 'todo') totalTodos++;
+        else if (issue.type === 'fixme') totalFixmes++;
+        else if (issue.type === 'console_log') totalConsoleLogs++;
+      });
+      totalIssues += file.issueCount;
+      if (file.cleanedBytes !== undefined) {
+        totalBytesSaved += Math.max(0, file.originalBytes - file.cleanedBytes);
+      }
+    });
+
+    setRepoAnalysis({
+      ...repoAnalysis,
+      files: updatedFiles,
+      totalIssues,
+      totalBytesSaved,
+      totalComments,
+      totalTodos,
+      totalFixmes,
+      totalConsoleLogs
+    });
+
+    setRepoLoading(false);
+    setRepoProgress(null);
+  };
+
   const selectedFile = repoAnalysis?.files.find((f) => f.path === selectedFilePath);
 
   const repoName = (() => {
@@ -414,6 +486,8 @@ export default function RepositoryTab() {
             repoAnalysis={repoAnalysis}
             skippedFilesCount={skippedFiles.length}
             onReset={handleRepoReset}
+            onBatchClean={handleBatchClean}
+            isCleaning={repoLoading}
           />
 
           <div className="grid md:grid-cols-3 gap-8 items-stretch min-h-[460px]">

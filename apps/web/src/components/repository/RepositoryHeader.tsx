@@ -9,13 +9,17 @@ interface RepositoryHeaderProps {
   repoAnalysis: RepositoryAnalysis;
   skippedFilesCount: number;
   onReset: () => void;
+  onBatchClean: () => Promise<void>;
+  isCleaning: boolean;
 }
 
 export default function RepositoryHeader({
   repoName,
   repoAnalysis,
   skippedFilesCount,
-  onReset
+  onReset,
+  onBatchClean,
+  isCleaning
 }: RepositoryHeaderProps) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -138,13 +142,14 @@ export default function RepositoryHeader({
 
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => triggerStub('Batch Clean')}
-            className="px-4.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
+            onClick={onBatchClean}
+            disabled={isCleaning}
+            className="px-4.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-all cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-9-5.25h12M3.75 6.75h16.5" />
             </svg>
-            Clean Repository
+            {isCleaning ? 'Cleaning...' : 'Clean Repository'}
           </button>
           <button
             onClick={() => triggerStub('Export Cleaned ZIP')}
@@ -166,7 +171,8 @@ export default function RepositoryHeader({
           </button>
           <button
             onClick={onReset}
-            className="px-4.5 py-2.5 bg-zinc-100 hover:bg-zinc-250 border border-zinc-200 text-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:border-zinc-800 dark:text-zinc-350 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1"
+            disabled={isCleaning}
+            className="px-4.5 py-2.5 bg-zinc-100 hover:bg-zinc-250 border border-zinc-200 text-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:border-zinc-800 dark:text-zinc-350 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Reset
           </button>
