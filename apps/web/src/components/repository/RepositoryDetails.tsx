@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import type { RepositoryFile } from '../../types/sanitize';
 import IssueCard from '../issue-card';
+import { computeLineDiff } from '../../lib/repository/diff';
 
 interface RepositoryDetailsProps {
   file: RepositoryFile;
@@ -46,6 +47,11 @@ export default function RepositoryDetails({
   };
 
   const isCleaned = file.cleanedContent !== undefined;
+  
+  // Compute aligned diff lines if cleaned
+  const { left, right } = isCleaned 
+    ? computeLineDiff(file.content, file.cleanedContent || '') 
+    : { left: [], right: [] };
 
   return (
     <div className="flex flex-col gap-6 h-full">
@@ -136,15 +142,27 @@ export default function RepositoryDetails({
           <div className="grid md:grid-cols-2 gap-6 items-stretch">
             <div className="flex flex-col gap-2">
               <label className="text-xs font-extrabold text-zinc-450 dark:text-zinc-500 pl-1 uppercase tracking-wide">Original Code</label>
-              <pre className="text-xs font-mono text-zinc-600 dark:text-zinc-400 bg-zinc-100/60 dark:bg-black/30 border border-zinc-200 dark:border-zinc-850 p-4.5 rounded-lg overflow-auto max-h-[300px] whitespace-pre-wrap break-all min-h-[180px] leading-relaxed">
-                {file.content}
-              </pre>
+              <div className="text-xs font-mono bg-zinc-100/60 dark:bg-black/30 border border-zinc-200 dark:border-zinc-850 rounded-lg overflow-auto max-h-[300px] min-h-[180px] p-2 flex flex-col font-medium leading-relaxed select-text">
+                {left.map((line, idx) => (
+                  <div key={`left-${idx}`} className={`flex w-full items-start px-2 ${line.type === 'removed' ? 'bg-red-500/15 text-red-700 dark:text-red-400 font-semibold' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                    <span className="w-8 text-right select-none opacity-45 mr-3 text-[10px] pr-1.5 border-r border-zinc-300 dark:border-zinc-800">{line.lineNumber}</span>
+                    <span className="flex-1 whitespace-pre break-all">{line.content || ' '}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 pl-1 uppercase tracking-wide">Cleaned Code</label>
-              <pre className="text-xs font-mono text-zinc-800 dark:text-zinc-200 bg-zinc-150/40 dark:bg-black/30 border border-emerald-500/20 p-4.5 rounded-lg overflow-auto max-h-[300px] whitespace-pre-wrap break-all min-h-[180px] leading-relaxed">
-                {file.cleanedContent || '/* File is empty after cleaning */'}
-              </pre>
+              <div className="text-xs font-mono bg-zinc-150/40 dark:bg-black/30 border border-emerald-500/20 rounded-lg overflow-auto max-h-[300px] min-h-[180px] p-2 flex flex-col font-medium leading-relaxed select-text">
+                {right.map((line, idx) => (
+                  <div key={`right-${idx}`} className={`flex w-full items-start px-2 ${line.type === 'removed' ? 'bg-red-500/5 dark:bg-red-950/10 h-[1.375rem]' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                    <span className="w-8 text-right select-none opacity-45 mr-3 text-[10px] pr-1.5 border-r border-zinc-300 dark:border-zinc-800">
+                      {line.lineNumber !== undefined ? line.lineNumber : ' '}
+                    </span>
+                    <span className="flex-1 whitespace-pre break-all">{line.content || ' '}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 

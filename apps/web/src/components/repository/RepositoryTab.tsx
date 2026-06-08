@@ -6,6 +6,7 @@ import { cleanContent } from 'codemelt-sanitize-core/dist/cleaner.js';
 import { SUPPORTED_EXTENSIONS } from 'codemelt-sanitize-shared';
 import type { RepositoryAnalysis, RepositoryFile } from '../../types/sanitize';
 import { DEFAULT_ANALYZE_CONFIG } from '../../lib/default-config';
+import { calculateHealthScore } from '../../lib/repository/health-score';
 
 // Import subcomponents
 import RepositoryUploader from './RepositoryUploader';
@@ -423,6 +424,171 @@ export default function RepositoryTab() {
     setRepoProgress(null);
   };
 
+  const displayBytesLocal = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  };
+
+  // Generate and download reports (MD and JSON formats)
+  const handleGenerateReport = () => {
+    if (!repoAnalysis) return;
+
+    let criticalCount = 0;
+    let warningCount = 0;
+    let infoCount = 0;
+    let cleanedFilesCount = 0;
+
+    repoAnalysis.files.forEach((file) => {
+      if (file.cleanedContent !== undefined) {
+        cleanedFilesCount++;
+      }
+      file.issues.forEach((issue) => {
+        if (issue.type === 'fixme') {
+          criticalCount++;
+        } else if (issue.type === 'todo' || issue.type === 'console_log') {
+          warningCount++;
+        } else if (issue.type === 'comment') {
+          infoCount++;
+        }
+      });
+    });
+
+    const healthScore = calculateHealthScore(
+      repoAnalysis.totalFiles,
+      criticalCount,
+      warningCount,
+      infoCount
+    );
+
+    // 1. JSON Report
+    const reportJsonObj = {
+      repositoryName: repoName,
+      generatedAt: new Date().toISOString(),
+      healthScore,
+      summary: {
+        totalFiles: repoAnalysis.totalFiles,
+        cleanedFiles: cleanedFilesCount,
+        totalIssuesRemaining: repoAnalysis.totalIssues,
+        bytesSaved: repoAnalysis.totalBytesSaved,
+        severityRemaining: {
+          critical: criticalCount,
+          warning: warningCount,
+          informational: infoCount
+        }
+      },
+      files: repoAnalysis.files.map((file) => ({
+        path: file.path,
+        originalBytes: file.originalBytes,
+        cleanedBytes: file.cleanedBytes || file.originalBytes,
+        bytesSaved: file.cleanedBytes !== undefined ? Math.max(0, file.originalBytes - file.cleanedBytes) : 0,
+        issuesCount: file.issueCount,
+        status: file.cleanedContent !== undefined ? 'cleaned' : 'original'
+      }))
+    };
+
+    const jsonBlob = new Blob([JSON.stringify(reportJsonObj, null, 2)], { type: 'application/json;charset=utf-8' });
+    const jsonUrl = URL.createObjectURL(jsonBlob);
+    const jsonLink = document.createElement('a');
+    jsonLink.href = jsonUrl;
+    jsonLink.download = `${repoName}-report.json`;
+    jsonLink.click();
+    URL.revokeObjectURL(jsonUrl);
+
+    // 2. Markdown Report
+    let markdownContent = `# CodeMelt Sanitize - Repository Clean Report\n\n`;
+    markdownContent += `**Repository Name:** ${repoName}\n`;
+    markdownContent += `**Generated At:** ${new Date().toLocaleString()}\n`;
+    markdownContent += `**Workspace Health Score:** ${healthScore} / 100\n\n`;
+    
+    markdownContent += `## Summary Metrics\n`;
+    markdownContent += `| Metric | Value |\n`;
+    markdownContent += `| :--- | :--- |\n`;
+    markdownContent += `| Total Files Scanned | ${repoAnalysis.totalFiles} |\n`;
+    markdownContent += `| Total Files Cleaned | ${cleanedFilesCount} |\n`;
+    markdownContent += `| Total Remaining Issues | ${repoAnalysis.totalIssues} |\n`;
+    markdownContent += `| Total Bytes Saved | ${displayBytesLocal(repoAnalysis.totalBytesSaved)} |\n\n`;
+
+    markdownContent += `## Remaining Issues Severity Breakdown\n`;
+    markdownContent += `| Severity | Count |\n`;
+    markdownContent += `| :--- | :--- |\n`;
+    markdownContent += `| **Critical** | ${criticalCount} |\n`;
+    markdownContent += `| **Warning** | ${warningCount} |\n`;
+    markdownContent += `| **Informational** | ${infoCount} |\n\n`;
+
+    markdownContent += `## Detailed File Status List\n`;
+    markdownContent += `| File Path | Original Size | Cleaned Size | Bytes Saved | Remaining Issues | Status |\n`;
+    markdownContent += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
+
+    repoAnalysis.files.forEach((file) => {
+      const originalSize = displayBytesLocal(file.originalBytes);
+      const cleanedSize = file.cleanedBytes !== undefined ? displayBytesLocal(file.cleanedBytes) : originalSize;
+      const saved = file.cleanedBytes !== undefined ? displayBytesLocal(Math.max(0, file.originalBytes - file.cleanedBytes)) : '0 B';
+      const status = file.cleanedContent !== undefined ? '✅ Cleaned' : 'Original';
+      markdownContent += `| \`${file.path}\` | ${originalSize} | ${cleanedSize} | ${saved} | ${file.issueCount} | ${status} |\n`;
+    });
+
+    const mdBlob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+    const mdUrl = URL.createObjectURL(mdBlob);
+    const mdLink = document.createElement('a');
+    mdLink.href = mdUrl;
+    mdLink.download = `${repoName}-report.md`;
+    mdLink.click();
+    URL.revokeObjectURL(mdUrl);
+  };
+
+  // Export raw scan findings / analysis metrics
+  const handleExportMetrics = () => {
+    if (!repoAnalysis) return;
+
+    let criticalCount = 0;
+    let warningCount = 0;
+    let infoCount = 0;
+
+    repoAnalysis.files.forEach((file) => {
+      file.issues.forEach((issue) => {
+        if (issue.type === 'fixme') {
+          criticalCount++;
+        } else if (issue.type === 'todo' || issue.type === 'console_log') {
+          warningCount++;
+        } else if (issue.type === 'comment') {
+          infoCount++;
+        }
+      });
+    });
+
+    const analysisJsonObj = {
+      repositoryName: repoName,
+      exportedAt: new Date().toISOString(),
+      summary: {
+        totalFiles: repoAnalysis.totalFiles,
+        totalIssues: repoAnalysis.totalIssues,
+        severityCounts: {
+          critical: criticalCount,
+          warning: warningCount,
+          informational: infoCount
+        }
+      },
+      files: repoAnalysis.files.map((file) => ({
+        path: file.path,
+        issuesCount: file.issueCount,
+        issues: file.issues.map((issue) => ({
+          line: issue.line,
+          type: issue.type,
+          message: issue.message,
+          contentPreview: issue.rawContent.trim().substring(0, 100)
+        }))
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(analysisJsonObj, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${repoName}-analysis.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const selectedFile = repoAnalysis?.files.find((f) => f.path === selectedFilePath);
 
   const repoName = (() => {
@@ -487,6 +653,8 @@ export default function RepositoryTab() {
             skippedFilesCount={skippedFiles.length}
             onReset={handleRepoReset}
             onBatchClean={handleBatchClean}
+            onGenerateReport={handleGenerateReport}
+            onExportMetrics={handleExportMetrics}
             isCleaning={repoLoading}
           />
 

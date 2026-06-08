@@ -10,6 +10,8 @@ interface RepositoryHeaderProps {
   skippedFilesCount: number;
   onReset: () => void;
   onBatchClean: () => Promise<void>;
+  onGenerateReport: () => void;
+  onExportMetrics: () => void;
   isCleaning: boolean;
 }
 
@@ -19,6 +21,8 @@ export default function RepositoryHeader({
   skippedFilesCount,
   onReset,
   onBatchClean,
+  onGenerateReport,
+  onExportMetrics,
   isCleaning
 }: RepositoryHeaderProps) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -153,7 +157,8 @@ export default function RepositoryHeader({
           </button>
           <button
             onClick={() => triggerStub('Export Cleaned ZIP')}
-            className="px-4.5 py-2.5 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:border-zinc-800 dark:text-zinc-200 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+            disabled={isCleaning}
+            className="px-4.5 py-2.5 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:border-zinc-800 dark:text-zinc-200 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -161,13 +166,24 @@ export default function RepositoryHeader({
             Export ZIP
           </button>
           <button
-            onClick={() => triggerStub('Generate Report')}
-            className="px-4.5 py-2.5 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:border-zinc-800 dark:text-zinc-200 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+            onClick={onGenerateReport}
+            disabled={isCleaning}
+            className="px-4.5 py-2.5 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:border-zinc-800 dark:text-zinc-200 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
             </svg>
             Generate Report
+          </button>
+          <button
+            onClick={onExportMetrics}
+            disabled={isCleaning}
+            className="px-4.5 py-2.5 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:border-zinc-800 dark:text-zinc-200 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4 text-blue-500">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-2.25v2.25m3-2.25v2.25m3-2.25v2.25M3.75 20.25h16.5A2.25 2.25 0 0 0 22 18V6a2.25 2.25 0 0 0-2.25-2.25H3.75A2.25 2.25 0 0 0 1.5 6v12a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+            Export Metrics
           </button>
           <button
             onClick={onReset}
