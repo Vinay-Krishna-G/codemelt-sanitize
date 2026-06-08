@@ -1,0 +1,18 @@
+{
+  "name": "codemelt-sanitize",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "codemelt-sanitize": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "codemelt-sanitize-core": "*",
+    "codemelt-sanitize-shared": "*",
+    "commander": "^12.1.0",
+    "chalk": "^5.3.0"
+  }
+}

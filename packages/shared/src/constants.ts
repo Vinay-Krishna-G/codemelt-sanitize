@@ -1,0 +1,40 @@
+export const DEFAULT_EXCLUDES = [
+  'node_modules/**',
+  '.git/**',
+  'dist/**',
+  'build/**',
+  '.next/**',
+  'out/**',
+  'coverage/**',
+  'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  '**/*.log',
+  '**/*.png',
+  '**/*.jpg',
+  '**/*.jpeg',
+  '**/*.gif',
+  '**/*.ico',
+  '**/*.svg',
+  '**/*.woff',
+  '**/*.woff2',
+  '**/*.ttf',
+  '**/*.eot',
+  '**/*.mp4',
+  '**/*.mp3',
+  '**/*.pdf',
+  '**/*.zip',
+  '**/*.gz',
+  '**/*.tar',
+  '**/*.rar'
+];
+
+export const SUPPORTED_EXTENSIONS = [
+  '.js', '.mjs', '.cjs',
+  '.ts', '.mts', '.cts',
+  '.jsx', '.tsx',
+  '.py', '.go', '.rb',
+  '.java', '.cpp', '.h', '.c',
+  '.rs', '.cs', '.sh', '.php',
+  '.css', '.html'
+];

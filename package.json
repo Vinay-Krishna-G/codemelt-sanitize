@@ -1,0 +1,19 @@
+{
+  "name": "codemelt-sanitize-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "packages/core",
+    "packages/cli",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
