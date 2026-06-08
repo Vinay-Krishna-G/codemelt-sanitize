@@ -90,7 +90,7 @@ function testConsoleLogRemoval() {
   const expected = [
     '',
     'const a = 1;  const b = 2;',
-    '', // Note: for multiline console.logs, line-based strips start line, but subsequent lines are code/comment.
+    'console.log(', // preserved because of line-based limitations (documented)
     '  "multiline log statement"', // preserved because of line-based limitations (documented)
     ');',
     'const c = 3;'

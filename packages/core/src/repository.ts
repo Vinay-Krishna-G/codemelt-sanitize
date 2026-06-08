@@ -46,7 +46,9 @@ function matchesPattern(filePath: string, root: string, pattern: string): boolea
   const relativePath = path.relative(root, filePath);
   
   let normalizedPattern = pattern;
-  if (pattern.endsWith('/') && pattern.length > 1) {
+  if (pattern.endsWith('/**') && pattern.length > 3) {
+    normalizedPattern = pattern.slice(0, -3);
+  } else if (pattern.endsWith('/') && pattern.length > 1) {
     normalizedPattern = pattern.slice(0, -1);
   }
   

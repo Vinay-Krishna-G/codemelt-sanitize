@@ -3,6 +3,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { scanRepository, cleanRepository, Issue } from 'codemelt-sanitize-core';
+import { fileURLToPath } from 'node:url';
+import * as path from 'node:path';
 
 // Exported wrapper service to support test mocking/spying
 export const repositoryService = {
@@ -91,9 +93,9 @@ program
     }
   });
 
-const isMain = import.meta.url.startsWith('file:') &&
-               process.argv[1] &&
-               (process.argv[1].endsWith('index.js') || process.argv[1].includes('codemelt-sanitize'));
+const isMain =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isMain) {
   program.parse(process.argv);
