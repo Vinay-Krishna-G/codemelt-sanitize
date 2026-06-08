@@ -45,7 +45,12 @@ export interface CleanRepositoryResult extends ScanRepositoryResult {
 function matchesPattern(filePath: string, root: string, pattern: string): boolean {
   const relativePath = path.relative(root, filePath);
   
-  const regexPattern = pattern
+  let normalizedPattern = pattern;
+  if (pattern.endsWith('/') && pattern.length > 1) {
+    normalizedPattern = pattern.slice(0, -1);
+  }
+  
+  const regexPattern = normalizedPattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*\*/g, '.*')
     .replace(/\*/g, '[^/]*')

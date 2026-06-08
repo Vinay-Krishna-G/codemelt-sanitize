@@ -98,7 +98,7 @@ export function cleanLine(
 
   if (state.inBlockComment) {
     if (syntax.blockEnd) {
-      const endIdx = getCommentStartIndex(line, syntax.blockEnd);
+      const endIdx = line.indexOf(syntax.blockEnd);
       if (endIdx !== -1) {
         const commentPart = line.substring(0, endIdx + syntax.blockEnd.length);
         const codePart = line.substring(endIdx + syntax.blockEnd.length);
@@ -150,7 +150,7 @@ export function cleanLine(
     if (blockStartIdx !== -1 && syntax.blockStart && syntax.blockEnd) {
       const codePart = line.substring(0, blockStartIdx);
       const rest = line.substring(blockStartIdx);
-      const endIdx = getCommentStartIndex(rest, syntax.blockEnd);
+      const endIdx = rest.indexOf(syntax.blockEnd, syntax.blockStart.length);
       if (endIdx !== -1) {
         const commentPart = rest.substring(0, endIdx + syntax.blockEnd.length);
         const postCode = rest.substring(endIdx + syntax.blockEnd.length);

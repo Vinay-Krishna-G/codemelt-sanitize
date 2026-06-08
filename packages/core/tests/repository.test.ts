@@ -153,6 +153,52 @@ async function testErrorHandling() {
   assert.ok(invalidResult.errors[0].error.includes('ENOENT'), 'Error should be ENOENT');
 }
 
+async function testNestedIgnorePatternRegression() {
+  console.log('Running: testNestedIgnorePatternRegression');
+  await setupFixtures();
+
+  // Create additional nested directories
+  await fs.mkdir(path.join(tempDir, 'foo', 'baz', 'bar'), { recursive: true });
+  await fs.mkdir(path.join(tempDir, 'foo', 'bar'), { recursive: true });
+  await fs.mkdir(path.join(tempDir, 'foo', 'barista'), { recursive: true });
+  await fs.mkdir(path.join(tempDir, 'packages', 'core', 'dist'), { recursive: true });
+
+  // Create nested files
+  await fs.writeFile(path.join(tempDir, 'foo', 'baz', 'bar', 'file.js'), 'console.log("foo/*/bar");', 'utf-8');
+  await fs.writeFile(path.join(tempDir, 'foo', 'bar', 'file.js'), 'console.log("foo/bar");', 'utf-8');
+  await fs.writeFile(path.join(tempDir, 'foo', 'barista', 'file.js'), 'console.log("foo/barista");', 'utf-8');
+  await fs.writeFile(path.join(tempDir, 'packages', 'core', 'dist', 'file.js'), 'console.log("packages/*/dist");', 'utf-8');
+
+  // Confirm dist/bundle.js exists (created by setupFixtures)
+  const distBundleExists = await fs.stat(path.join(tempDir, 'dist', 'bundle.js')).then(() => true).catch(() => false);
+  assert.ok(distBundleExists, 'dist/bundle.js should exist in the fixture');
+
+  const result = await scanRepository({
+    root: tempDir,
+    recursive: true,
+    exclude: [
+      'foo/*/bar/',
+      'foo/bar/',
+      'dist/',
+      'packages/*/dist/'
+    ]
+  });
+
+  const scannedPaths = result.filesScanned.map(p => path.relative(tempDir, p).replace(/\\/g, '/'));
+
+  // Assert that nested files inside matched directories are correctly skipped
+  assert.ok(!scannedPaths.includes('foo/baz/bar/file.js'), 'foo/baz/bar/file.js should be ignored');
+  assert.ok(!scannedPaths.includes('foo/bar/file.js'), 'foo/bar/file.js should be ignored');
+  assert.ok(!scannedPaths.includes('dist/bundle.js'), 'dist/bundle.js should be ignored');
+  assert.ok(!scannedPaths.includes('packages/core/dist/file.js'), 'packages/core/dist/file.js should be ignored');
+
+  // Assert that foo/barista/file.js is scanned and NOT matched by foo/bar/
+  assert.ok(scannedPaths.includes('foo/barista/file.js'), 'foo/barista/file.js should be scanned (not match foo/bar/)');
+
+  // Verify that the control file src/index.ts is still scanned
+  assert.ok(scannedPaths.includes('src/index.ts'), 'src/index.ts should be scanned');
+}
+
 async function runAllRepositoryTests() {
   console.log('Starting CodeMelt Sanitize Repository Layer tests...\n');
   try {
@@ -161,6 +207,7 @@ async function runAllRepositoryTests() {
     await testDryRunCleaning();
     await testWriteCleaning();
     await testErrorHandling();
+    await testNestedIgnorePatternRegression();
     await cleanupFixtures();
     console.log('\nAll repository layer tests completed successfully!');
   } catch (error) {

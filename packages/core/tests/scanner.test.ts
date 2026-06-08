@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import { scanContent } from '../src/scanner.js';
+import { cleanContent } from '../src/cleaner.js';
 import { CleanConfig } from 'codemelt-sanitize-shared';
 
 const defaultConfig: CleanConfig = {
@@ -95,6 +96,37 @@ function testConsoleLogs() {
   assert.strictEqual(commentIssues.length, 1, 'Should detect the commented-out console.log as comment');
 }
 
+function testBlockCommentQuotesRegression() {
+  console.log('Running: testBlockCommentQuotesRegression');
+  
+  const singleQuoteCode = `/* comment with ' single quote */\nconst x = 1;`;
+  const doubleQuoteCode = `/* comment with " double quote */\nconst x = 2;`;
+  const backtickQuoteCode = `/* comment with \` template quote */\nconst x = 3;`;
+  
+  const js1 = scanContent(singleQuoteCode, 'test1.js', defaultConfig);
+  const js2 = scanContent(doubleQuoteCode, 'test2.js', defaultConfig);
+  const js3 = scanContent(backtickQuoteCode, 'test3.js', defaultConfig);
+
+  // Assert that block comment terminates correctly and subsequent code is not classified as a comment
+  assert.strictEqual(js1.filter(i => i.type === 'comment').length, 1, 'Should detect only 1 comment with single quote');
+  assert.strictEqual(js2.filter(i => i.type === 'comment').length, 1, 'Should detect only 1 comment with double quote');
+  assert.strictEqual(js3.filter(i => i.type === 'comment').length, 1, 'Should detect only 1 comment with template quote');
+
+  // Verify that the code lines are not treated as comments
+  assert.ok(!js1.some(i => i.rawContent.includes('const x = 1;')), 'Subsequent code should not be treated as comment (single quote)');
+  assert.ok(!js2.some(i => i.rawContent.includes('const x = 2;')), 'Subsequent code should not be treated as comment (double quote)');
+  assert.ok(!js3.some(i => i.rawContent.includes('const x = 3;')), 'Subsequent code should not be treated as comment (template quote)');
+
+  // Verify that cleanContent works correctly and does not wipe out code
+  const clean1 = cleanContent(singleQuoteCode, 'test1.js', defaultConfig);
+  const clean2 = cleanContent(doubleQuoteCode, 'test2.js', defaultConfig);
+  const clean3 = cleanContent(backtickQuoteCode, 'test3.js', defaultConfig);
+
+  assert.strictEqual(clean1, '\nconst x = 1;', 'Cleaned singleQuoteCode should preserve subsequent code');
+  assert.strictEqual(clean2, '\nconst x = 2;', 'Cleaned doubleQuoteCode should preserve subsequent code');
+  assert.strictEqual(clean3, '\nconst x = 3;', 'Cleaned backtickQuoteCode should preserve subsequent code');
+}
+
 function runAllTests() {
   console.log('Starting CodeMelt Sanitize Scanner tests...\n');
   try {
@@ -102,6 +134,7 @@ function runAllTests() {
     testBlockComments();
     testTodoFixmeDetection();
     testConsoleLogs();
+    testBlockCommentQuotesRegression();
     console.log('\nAll tests completed successfully!');
   } catch (error) {
     console.error('Test execution failed:', error);
