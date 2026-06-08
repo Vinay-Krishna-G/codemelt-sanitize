@@ -2,11 +2,12 @@
 
 import React, { useState } from 'react';
 import { scanContent } from 'codemelt-sanitize-core/dist/scanner.js';
-import { cleanContent } from 'codemelt-sanitize-core/dist/cleaner.js';
 import { SUPPORTED_EXTENSIONS } from 'codemelt-sanitize-shared';
 import type { RepositoryAnalysis, RepositoryFile } from '../../types/sanitize';
 import { DEFAULT_ANALYZE_CONFIG } from '../../lib/default-config';
-import { calculateHealthScore } from '../../lib/repository/health-score';
+import { cleanRepositoryFile, recalculateRepositoryMetrics } from '../../lib/repository/repository-cleaner';
+import { generateReport } from '../../lib/repository/report-generator';
+import { generateAnalysisMetrics } from '../../lib/repository/metrics-export';
 
 // Import subcomponents
 import RepositoryUploader from './RepositoryUploader';
@@ -279,46 +280,24 @@ export default function RepositoryTab() {
     if (!file) return;
 
     try {
-      const response = await fetch('/api/clean', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ code: file.content, filename: file.path.split('/').pop() })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        console.error(data.error || 'Failed to clean file');
-        return;
-      }
-
-      const cleanedCode = data.cleanedCode;
-      const cleanedIssues = scanContent(cleanedCode, file.path, DEFAULT_ANALYZE_CONFIG);
+      const cleanedFile = cleanRepositoryFile(file, DEFAULT_ANALYZE_CONFIG);
 
       const updatedFiles = repoAnalysis.files.map((f) => {
         if (f.path === filePath) {
-          return {
-            ...f,
-            cleanedContent: cleanedCode,
-            cleanedBytes: new TextEncoder().encode(cleanedCode).length,
-            issues: cleanedIssues,
-            issueCount: cleanedIssues.length
-          };
+          return cleanedFile;
         }
         return f;
       });
 
-      const totalIssues = updatedFiles.reduce((sum, f) => sum + f.issueCount, 0);
+      const metrics = recalculateRepositoryMetrics(updatedFiles);
 
       setRepoAnalysis({
         ...repoAnalysis,
         files: updatedFiles,
-        totalIssues
+        ...metrics
       });
     } catch (err) {
-      console.error('Failed to communicate with cleaner api:', err);
+      console.error('Failed to clean file:', err);
     }
   };
 
@@ -344,12 +323,12 @@ export default function RepositoryTab() {
       return f;
     });
 
-    const totalIssues = updatedFiles.reduce((sum, f) => sum + f.issueCount, 0);
+    const metrics = recalculateRepositoryMetrics(updatedFiles);
 
     setRepoAnalysis({
       ...repoAnalysis,
       files: updatedFiles,
-      totalIssues
+      ...metrics
     });
   };
 
@@ -370,16 +349,7 @@ export default function RepositoryTab() {
 
       for (let j = i; j < chunkEnd; j++) {
         const file = filesToClean[j];
-        const cleaned = cleanContent(file.content, file.path, DEFAULT_ANALYZE_CONFIG);
-        const cleanedIssues = scanContent(cleaned, file.path, DEFAULT_ANALYZE_CONFIG);
-
-        updatedFiles[j] = {
-          ...file,
-          cleanedContent: cleaned,
-          cleanedBytes: new TextEncoder().encode(cleaned).length,
-          issues: cleanedIssues,
-          issueCount: cleanedIssues.length
-        };
+        updatedFiles[j] = cleanRepositoryFile(file, DEFAULT_ANALYZE_CONFIG);
       }
 
       setRepoProgress({ current: chunkEnd, total: totalFiles });
@@ -389,104 +359,25 @@ export default function RepositoryTab() {
     }
 
     // Recalculate repository-level metrics
-    let totalIssues = 0;
-    let totalComments = 0;
-    let totalTodos = 0;
-    let totalFixmes = 0;
-    let totalConsoleLogs = 0;
-    let totalBytesSaved = 0;
-
-    updatedFiles.forEach((file) => {
-      file.issues.forEach((issue) => {
-        if (issue.type === 'comment') totalComments++;
-        else if (issue.type === 'todo') totalTodos++;
-        else if (issue.type === 'fixme') totalFixmes++;
-        else if (issue.type === 'console_log') totalConsoleLogs++;
-      });
-      totalIssues += file.issueCount;
-      if (file.cleanedBytes !== undefined) {
-        totalBytesSaved += Math.max(0, file.originalBytes - file.cleanedBytes);
-      }
-    });
+    const metrics = recalculateRepositoryMetrics(updatedFiles);
 
     setRepoAnalysis({
       ...repoAnalysis,
       files: updatedFiles,
-      totalIssues,
-      totalBytesSaved,
-      totalComments,
-      totalTodos,
-      totalFixmes,
-      totalConsoleLogs
+      ...metrics
     });
 
     setRepoLoading(false);
     setRepoProgress(null);
   };
 
-  const displayBytesLocal = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  };
-
   // Generate and download reports (MD and JSON formats)
   const handleGenerateReport = () => {
     if (!repoAnalysis) return;
 
-    let criticalCount = 0;
-    let warningCount = 0;
-    let infoCount = 0;
-    let cleanedFilesCount = 0;
+    const { json, markdown } = generateReport(repoName, repoAnalysis);
 
-    repoAnalysis.files.forEach((file) => {
-      if (file.cleanedContent !== undefined) {
-        cleanedFilesCount++;
-      }
-      file.issues.forEach((issue) => {
-        if (issue.type === 'fixme') {
-          criticalCount++;
-        } else if (issue.type === 'todo' || issue.type === 'console_log') {
-          warningCount++;
-        } else if (issue.type === 'comment') {
-          infoCount++;
-        }
-      });
-    });
-
-    const healthScore = calculateHealthScore(
-      repoAnalysis.totalFiles,
-      criticalCount,
-      warningCount,
-      infoCount
-    );
-
-    // 1. JSON Report
-    const reportJsonObj = {
-      repositoryName: repoName,
-      generatedAt: new Date().toISOString(),
-      healthScore,
-      summary: {
-        totalFiles: repoAnalysis.totalFiles,
-        cleanedFiles: cleanedFilesCount,
-        totalIssuesRemaining: repoAnalysis.totalIssues,
-        bytesSaved: repoAnalysis.totalBytesSaved,
-        severityRemaining: {
-          critical: criticalCount,
-          warning: warningCount,
-          informational: infoCount
-        }
-      },
-      files: repoAnalysis.files.map((file) => ({
-        path: file.path,
-        originalBytes: file.originalBytes,
-        cleanedBytes: file.cleanedBytes || file.originalBytes,
-        bytesSaved: file.cleanedBytes !== undefined ? Math.max(0, file.originalBytes - file.cleanedBytes) : 0,
-        issuesCount: file.issueCount,
-        status: file.cleanedContent !== undefined ? 'cleaned' : 'original'
-      }))
-    };
-
-    const jsonBlob = new Blob([JSON.stringify(reportJsonObj, null, 2)], { type: 'application/json;charset=utf-8' });
+    const jsonBlob = new Blob([json], { type: 'application/json;charset=utf-8' });
     const jsonUrl = URL.createObjectURL(jsonBlob);
     const jsonLink = document.createElement('a');
     jsonLink.href = jsonUrl;
@@ -494,40 +385,7 @@ export default function RepositoryTab() {
     jsonLink.click();
     URL.revokeObjectURL(jsonUrl);
 
-    // 2. Markdown Report
-    let markdownContent = `# CodeMelt Sanitize - Repository Clean Report\n\n`;
-    markdownContent += `**Repository Name:** ${repoName}\n`;
-    markdownContent += `**Generated At:** ${new Date().toLocaleString()}\n`;
-    markdownContent += `**Workspace Health Score:** ${healthScore} / 100\n\n`;
-    
-    markdownContent += `## Summary Metrics\n`;
-    markdownContent += `| Metric | Value |\n`;
-    markdownContent += `| :--- | :--- |\n`;
-    markdownContent += `| Total Files Scanned | ${repoAnalysis.totalFiles} |\n`;
-    markdownContent += `| Total Files Cleaned | ${cleanedFilesCount} |\n`;
-    markdownContent += `| Total Remaining Issues | ${repoAnalysis.totalIssues} |\n`;
-    markdownContent += `| Total Bytes Saved | ${displayBytesLocal(repoAnalysis.totalBytesSaved)} |\n\n`;
-
-    markdownContent += `## Remaining Issues Severity Breakdown\n`;
-    markdownContent += `| Severity | Count |\n`;
-    markdownContent += `| :--- | :--- |\n`;
-    markdownContent += `| **Critical** | ${criticalCount} |\n`;
-    markdownContent += `| **Warning** | ${warningCount} |\n`;
-    markdownContent += `| **Informational** | ${infoCount} |\n\n`;
-
-    markdownContent += `## Detailed File Status List\n`;
-    markdownContent += `| File Path | Original Size | Cleaned Size | Bytes Saved | Remaining Issues | Status |\n`;
-    markdownContent += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
-
-    repoAnalysis.files.forEach((file) => {
-      const originalSize = displayBytesLocal(file.originalBytes);
-      const cleanedSize = file.cleanedBytes !== undefined ? displayBytesLocal(file.cleanedBytes) : originalSize;
-      const saved = file.cleanedBytes !== undefined ? displayBytesLocal(Math.max(0, file.originalBytes - file.cleanedBytes)) : '0 B';
-      const status = file.cleanedContent !== undefined ? '✅ Cleaned' : 'Original';
-      markdownContent += `| \`${file.path}\` | ${originalSize} | ${cleanedSize} | ${saved} | ${file.issueCount} | ${status} |\n`;
-    });
-
-    const mdBlob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+    const mdBlob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
     const mdUrl = URL.createObjectURL(mdBlob);
     const mdLink = document.createElement('a');
     mdLink.href = mdUrl;
@@ -540,47 +398,9 @@ export default function RepositoryTab() {
   const handleExportMetrics = () => {
     if (!repoAnalysis) return;
 
-    let criticalCount = 0;
-    let warningCount = 0;
-    let infoCount = 0;
+    const analysisJson = generateAnalysisMetrics(repoName, repoAnalysis);
 
-    repoAnalysis.files.forEach((file) => {
-      file.issues.forEach((issue) => {
-        if (issue.type === 'fixme') {
-          criticalCount++;
-        } else if (issue.type === 'todo' || issue.type === 'console_log') {
-          warningCount++;
-        } else if (issue.type === 'comment') {
-          infoCount++;
-        }
-      });
-    });
-
-    const analysisJsonObj = {
-      repositoryName: repoName,
-      exportedAt: new Date().toISOString(),
-      summary: {
-        totalFiles: repoAnalysis.totalFiles,
-        totalIssues: repoAnalysis.totalIssues,
-        severityCounts: {
-          critical: criticalCount,
-          warning: warningCount,
-          informational: infoCount
-        }
-      },
-      files: repoAnalysis.files.map((file) => ({
-        path: file.path,
-        issuesCount: file.issueCount,
-        issues: file.issues.map((issue) => ({
-          line: issue.line,
-          type: issue.type,
-          message: issue.message,
-          contentPreview: issue.rawContent.trim().substring(0, 100)
-        }))
-      }))
-    };
-
-    const blob = new Blob([JSON.stringify(analysisJsonObj, null, 2)], { type: 'application/json;charset=utf-8' });
+    const blob = new Blob([analysisJson], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
