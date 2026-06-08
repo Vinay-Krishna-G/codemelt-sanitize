@@ -14,3 +14,22 @@ export interface AnalyzeResponse {
   issues: Issue[];
   error?: string;
 }
+
+export interface CleanResponse {
+  version: string;
+  success: boolean;
+  filename: string;
+  originalCode: string;
+  cleanedCode: string;
+  summary: {
+    originalBytes: number;
+    cleanedBytes: number;
+    bytesSaved: number;
+    originalIssuesCount: number;
+    cleanedIssuesCount: number;
+    issuesRemoved: number;
+    percentReduction: number;
+  };
+  error?: string;
+}
+
