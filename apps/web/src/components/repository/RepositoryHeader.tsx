@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import type { RepositoryAnalysis } from '../../types/sanitize';
 import { calculateHealthScore } from '../../lib/repository/health-score';
 
@@ -12,6 +12,7 @@ interface RepositoryHeaderProps {
   onBatchClean: () => Promise<void>;
   onGenerateReport: () => void;
   onExportMetrics: () => void;
+  onExportZip: () => void;
   isCleaning: boolean;
 }
 
@@ -23,15 +24,9 @@ export default function RepositoryHeader({
   onBatchClean,
   onGenerateReport,
   onExportMetrics,
+  onExportZip,
   isCleaning
 }: RepositoryHeaderProps) {
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const triggerStub = (feature: string) => {
-    setToastMessage(`${feature} is a Phase 5B feature and is not yet implemented.`);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
-
   // 1. Calculate severity issue counts
   let criticalCount = 0;
   let warningCount = 0;
@@ -112,16 +107,6 @@ export default function RepositoryHeader({
   return (
     <div className="flex flex-col gap-6 border-b border-zinc-200 dark:border-zinc-800 pb-6 relative">
       
-      {/* Toast Alert */}
-      {toastMessage && (
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-xs px-4 py-2 rounded-full shadow-lg border border-zinc-700 dark:border-zinc-300 transition-all duration-300 z-50 flex items-center gap-1.5 animate-fadeIn">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-4 h-4 text-blue-500">
-            <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 1 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.852l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
-          </svg>
-          {toastMessage}
-        </div>
-      )}
-
       {/* Title block */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-3">
@@ -156,7 +141,7 @@ export default function RepositoryHeader({
             {isCleaning ? 'Cleaning...' : 'Clean Repository'}
           </button>
           <button
-            onClick={() => triggerStub('Export Cleaned ZIP')}
+            onClick={onExportZip}
             disabled={isCleaning}
             className="px-4.5 py-2.5 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:border-zinc-800 dark:text-zinc-200 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >

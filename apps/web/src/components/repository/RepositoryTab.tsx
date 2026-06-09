@@ -8,6 +8,11 @@ import { DEFAULT_ANALYZE_CONFIG } from '../../lib/default-config';
 import { cleanRepositoryFile, recalculateRepositoryMetrics } from '../../lib/repository/repository-cleaner';
 import { generateReport } from '../../lib/repository/report-generator';
 import { generateAnalysisMetrics } from '../../lib/repository/metrics-export';
+import { exportRepositoryZip } from '../../lib/repository/repository-export';
+import type { RepositoryIntelligence } from '../../types/intelligence';
+import { analyzeRepository } from '../../lib/repository/intelligence/index';
+import { calculateHealthScore } from '../../lib/repository/health-score';
+import RepositoryIntelligenceView from './RepositoryIntelligence';
 
 // Import subcomponents
 import RepositoryUploader from './RepositoryUploader';
@@ -35,6 +40,8 @@ export default function RepositoryTab() {
     extensions: number;
     oversized: number;
   } | null>(null);
+  const [intelligence, setIntelligence] = useState<RepositoryIntelligence | null>(null);
+  const [activeTab, setActiveTab] = useState<'explorer' | 'intelligence'>('explorer');
 
   const processFiles = async (fileList: File[]) => {
     setRepoLoading(true);
@@ -157,7 +164,7 @@ export default function RepositoryTab() {
     }
 
     setSkippedFiles(skippedArr);
-    setRepoAnalysis({
+    const initialRepoAnalysis: RepositoryAnalysis = {
       files: analyzedFiles,
       totalFiles: analyzedFiles.length,
       totalIssues,
@@ -167,7 +174,27 @@ export default function RepositoryTab() {
       totalTodos,
       totalFixmes,
       totalConsoleLogs
-    });
+    };
+    setRepoAnalysis(initialRepoAnalysis);
+
+    const computedRepoName = (() => {
+      const firstPath = analyzedFiles[0]?.path;
+      if (!firstPath) return 'Repository Analysis';
+      const segments = firstPath.split('/');
+      if (segments.length > 1) {
+        return segments[0]; // Shared root folder
+      }
+      return 'Repository Analysis';
+    })();
+
+    const currentHealthScore = calculateHealthScore(
+      analyzedFiles.length,
+      totalFixmes,
+      totalTodos + totalConsoleLogs,
+      totalComments
+    );
+    const intelResult = analyzeRepository(analyzedFiles, computedRepoName, currentHealthScore);
+    setIntelligence(intelResult);
 
     if (analyzedFiles.length > 0) {
       setSelectedFilePath(analyzedFiles[0].path);
@@ -271,6 +298,8 @@ export default function RepositoryTab() {
     setSelectedFilePath(null);
     setError(null);
     setSearchQuery('');
+    setIntelligence(null);
+    setActiveTab('explorer');
   };
 
   // Functional single file cleaning
@@ -296,6 +325,15 @@ export default function RepositoryTab() {
         files: updatedFiles,
         ...metrics
       });
+
+      const updatedHealthScore = calculateHealthScore(
+        updatedFiles.length,
+        metrics.totalFixmes,
+        metrics.totalTodos + metrics.totalConsoleLogs,
+        metrics.totalComments
+      );
+      const intelResult = analyzeRepository(updatedFiles, repoName, updatedHealthScore);
+      setIntelligence(intelResult);
     } catch (err) {
       console.error('Failed to clean file:', err);
     }
@@ -330,6 +368,15 @@ export default function RepositoryTab() {
       files: updatedFiles,
       ...metrics
     });
+
+    const updatedHealthScore = calculateHealthScore(
+      updatedFiles.length,
+      metrics.totalFixmes,
+      metrics.totalTodos + metrics.totalConsoleLogs,
+      metrics.totalComments
+    );
+    const intelResult = analyzeRepository(updatedFiles, repoName, updatedHealthScore);
+    setIntelligence(intelResult);
   };
 
   // Batch clean all files in the repository in chunks
@@ -366,6 +413,15 @@ export default function RepositoryTab() {
       files: updatedFiles,
       ...metrics
     });
+
+    const updatedHealthScore = calculateHealthScore(
+      updatedFiles.length,
+      metrics.totalFixmes,
+      metrics.totalTodos + metrics.totalConsoleLogs,
+      metrics.totalComments
+    );
+    const intelResult = analyzeRepository(updatedFiles, repoName, updatedHealthScore);
+    setIntelligence(intelResult);
 
     setRepoLoading(false);
     setRepoProgress(null);
@@ -407,6 +463,26 @@ export default function RepositoryTab() {
     link.download = `${repoName}-analysis.json`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Export the entire repository as a zipped archive (with reports, metadata, and folders)
+  const handleExportZip = () => {
+    // Guards: return if no repository is loaded or if it contains no files
+    if (!repoAnalysis || repoAnalysis.files.length === 0) return;
+
+    try {
+      const zipBytes = exportRepositoryZip(repoName, repoAnalysis);
+      const blob = new Blob([zipBytes as BlobPart], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${repoName}-cleaned.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export repository ZIP:', err);
+      setError('Failed to generate repository ZIP export.');
+    }
   };
 
   const selectedFile = repoAnalysis?.files.find((f) => f.path === selectedFilePath);
@@ -475,39 +551,78 @@ export default function RepositoryTab() {
             onBatchClean={handleBatchClean}
             onGenerateReport={handleGenerateReport}
             onExportMetrics={handleExportMetrics}
+            onExportZip={handleExportZip}
             isCleaning={repoLoading}
           />
 
-          <div className="grid md:grid-cols-3 gap-8 items-stretch min-h-[460px]">
-            {/* Left Explorer Sidebar */}
-            <div className="col-span-1 border-r border-zinc-200 dark:border-zinc-800 pr-5">
-              <RepositoryExplorer
-                files={repoAnalysis.files}
-                selectedFilePath={selectedFilePath}
-                setSelectedFilePath={setSelectedFilePath}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-              />
-            </div>
-
-            {/* Right Details Panel */}
-            <div className="col-span-2 pl-3">
-              {selectedFile ? (
-                <RepositoryDetails
-                  file={selectedFile}
-                  onCleanFile={handleCleanFile}
-                  onRevertFile={handleRevertFile}
-                />
-              ) : (
-                <div className="flex-1 h-full flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-850 rounded-xl p-8 text-center text-zinc-500 text-sm bg-zinc-50/50 dark:bg-zinc-950/20">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-10 h-10 text-zinc-400 dark:text-zinc-600 mb-3">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                  </svg>
-                  Select a file from the explorer sidebar to view its detailed code analysis.
-                </div>
-              )}
-            </div>
+          {/* Tab navigation buttons */}
+          <div className="flex border-b border-zinc-200 dark:border-zinc-800 mb-6">
+            <button
+              onClick={() => setActiveTab('explorer')}
+              className={`px-5 py-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                activeTab === 'explorer'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-extrabold'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-350'
+              }`}
+            >
+              Explorer
+            </button>
+            <button
+              onClick={() => setActiveTab('intelligence')}
+              className={`px-5 py-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                activeTab === 'intelligence'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 font-extrabold'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-350'
+              }`}
+            >
+              Intelligence Workspace
+            </button>
           </div>
+
+          {activeTab === 'explorer' ? (
+            <div className="grid md:grid-cols-3 gap-8 items-stretch min-h-[460px]">
+              {/* Left Explorer Sidebar */}
+              <div className="col-span-1 border-r border-zinc-200 dark:border-zinc-800 pr-5">
+                <RepositoryExplorer
+                  files={repoAnalysis.files}
+                  selectedFilePath={selectedFilePath}
+                  setSelectedFilePath={setSelectedFilePath}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                />
+              </div>
+
+              {/* Right Details Panel */}
+              <div className="col-span-2 pl-3">
+                {selectedFile ? (
+                  <RepositoryDetails
+                    file={selectedFile}
+                    onCleanFile={handleCleanFile}
+                    onRevertFile={handleRevertFile}
+                  />
+                ) : (
+                  <div className="flex-1 h-full flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-850 rounded-xl p-8 text-center text-zinc-500 text-sm bg-zinc-50/50 dark:bg-zinc-950/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-10 h-10 text-zinc-400 dark:text-zinc-600 mb-3">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                    </svg>
+                    Select a file from the explorer sidebar to view its detailed code analysis.
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            intelligence && (
+              <RepositoryIntelligenceView
+                intelligence={intelligence}
+                healthScore={calculateHealthScore(
+                  repoAnalysis.files.length,
+                  repoAnalysis.totalFixmes,
+                  repoAnalysis.totalTodos + repoAnalysis.totalConsoleLogs,
+                  repoAnalysis.totalComments
+                )}
+              />
+            )
+          )}
         </div>
       )}
     </div>
